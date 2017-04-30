@@ -91,4 +91,6 @@ ENV/
 # My ignore
 data/*
 !data/.keep
+model/*
+!model/.keep
 nlp/preprocessing/stopwords.txt
