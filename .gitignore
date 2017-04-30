@@ -87,3 +87,8 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# My ignore
+data/*
+!data/.keep
+nlp/preprocessing/stopwords.txt
