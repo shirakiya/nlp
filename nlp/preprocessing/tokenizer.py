@@ -47,9 +47,10 @@ class Tokenizer(object):
         chunks = self.mecab.parse(text).splitlines()[:-1]  # to remove 'EOS'
 
         for chunk in chunks:
-            if chunk == '':
+            splited_chunk = chunk.split('\t')
+            if len(splited_chunk) <= 1:
                 continue
-            surface, feature = chunk.split('\t')
+            surface, feature = splited_chunk
             features = feature.split(',')
             if len(features) <= 7:  # 読みが無い
                 features.append('')
