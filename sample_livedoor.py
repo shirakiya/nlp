@@ -3,23 +3,21 @@ import os
 import pickle
 
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.externals import joblib
 
+from nlp.datasets.livedoor import Livedoor
 from nlp.preprocessing.cleaning import clean_text
 from nlp.preprocessing.tokenizer import Tokenizer
 from nlp.preprocessing.normalization import normalize
 from nlp.preprocessing.stopword import get_basic_stopwords_ja, remove_stopwords
 from nlp.word_vectors.bag_of_words import BagOfWords
+from nlp.learning.random_forest import RandomForest
 
 
 def get_resource_path(path):
     dict_path = path + '.dict'
     corpus_path = path + '.mm'
     label_path = path + '_label.pkl'
-    clf_path = path + '_clf.pkl'
-    return dict_path, corpus_path, label_path, clf_path
+    return dict_path, corpus_path, label_path
 
 
 def preprocessing(text, tokenizer, stopwords):
@@ -31,7 +29,7 @@ def preprocessing(text, tokenizer, stopwords):
 
 
 def load_livedoor_dataset(base_path):
-    dict_path, corpus_path, label_path, _ = get_resource_path(base_path)
+    dict_path, corpus_path, label_path = get_resource_path(base_path)
 
     bag_of_words = BagOfWords()
     bag_of_words.load_dictionary(dict_path)
@@ -45,85 +43,28 @@ def load_livedoor_dataset(base_path):
     return vectors, labels
 
 
-def top_k(result_list, k=5):
-    x = np.array(result_list)
-    argsort_index_r = np.argsort(x)[::-1]
-    sort_value_r = np.sort(x)[::-1]
+def make_livedoor_dataset(args):
+    base_path = args.base_path
+    source = args.source
+    if not os.path.exists(source):
+        raise FileNotFoundError('Not found file or directory.')
 
-    index = []
-    value = []
-    for i in range(k):
-        if i == k or i > len(sort_value_r):
-            break
-        index.append(argsort_index_r[i])
-        value.append(sort_value_r[i])
-    return index, value
-
-
-def predict(base_path, text):
-    dict_path, _, _, clf_path = get_resource_path(base_path)
-
-    tokenizer = Tokenizer()
-    stopwords = get_basic_stopwords_ja()
-    bag_of_words = BagOfWords()
-    bag_of_words.load_dictionary(dict_path)
-    clf = joblib.load(clf_path)
-
-    words = preprocessing(text, tokenizer, stopwords)
-    feature = bag_of_words.to_dense(bag_of_words.doc2bow(words))
-    result_p = clf.predict([feature])
-    result_pp = clf.predict_proba([feature])
-
-    print('predict:', result_p)
-    print('predict_proba:', result_pp)
-    print('top 5:', top_k(result_pp[0], k=5))
-
-
-def train(base_path):
-    print('collecting dataset.')
-    x, y = load_livedoor_dataset(base_path)
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=44)
-
-    print('train ...')
-    clf = RandomForestClassifier(n_estimators=20, max_features='auto')
-    clf.fit(x_train, y_train)
-
-    score = clf.score(x_test, y_test)
-    print('Score: ', score)
-
-    clf_path = get_resource_path(base_path)[3]
-    joblib.dump(clf, clf_path)
-    print('model saved.')
-
-
-def make_livedoor_dataset(source, exclude_files, base_path):
     dict_path, corpus_path, label_path = get_resource_path(base_path)
     tokenizer = Tokenizer()
     stopwords = get_basic_stopwords_ja()
-    bag_of_words = BagOfWords()
 
     sentences = []
-    label2id = {}
-    labels = []
-    dirs = [e for e in os.listdir(source) if os.path.isdir(os.path.join(source, e))]
 
-    for root, _, files in os.walk(source):
-        parent_dir = os.path.basename(root)
-        if parent_dir in dirs and parent_dir not in label2id:
-            label2id[parent_dir] = len(label2id)
+    livedoor = Livedoor(source)
+    texts, labels = livedoor.get_data()
 
-        for file in files:
-            if file in exclude_files:
-                continue
-            file_words = []
-            for index, text in enumerate(open(os.path.join(root, file), 'r')):
-                if index <= 1:
-                    continue
-                words = preprocessing(text, tokenizer, stopwords)
-                file_words += words
-            sentences.append(file_words)
-            labels.append(label2id[parent_dir])
+    for text in texts:
+        sentence = []
+        for l in text.split('\n'):
+            sentence += preprocessing(l, tokenizer, stopwords)
+        sentences.append(sentence)
 
+    bag_of_words = BagOfWords()
     bag_of_words.make_dictionary(sentences, dict_path)
 
     corpus = [bag_of_words.doc2bow(s) for s in sentences]
@@ -135,26 +76,62 @@ def make_livedoor_dataset(source, exclude_files, base_path):
     print('Saved!')
 
 
+def train(args):
+    base_path = args.base_path
+    model_path = args.model_path
+
+    print('collecting dataset.')
+    x, y = load_livedoor_dataset(base_path)
+
+    trainer = RandomForest(model_path)
+    trainer.train(x, y)
+
+    print('finish.')
+
+
+def predict(args):
+    base_path = args.base_path
+    model_path = args.model_path
+    text = args.text
+
+    dict_path = get_resource_path(base_path)[0]
+
+    tokenizer = Tokenizer()
+    stopwords = get_basic_stopwords_ja()
+    bag_of_words = BagOfWords()
+    bag_of_words.load_dictionary(dict_path)
+    feature = bag_of_words.to_dense(
+        bag_of_words.doc2bow(preprocessing(text, tokenizer, stopwords)))
+
+    estimator = RandomForest(model_path)
+    result_p = estimator.predict([feature])
+    result_pp = estimator.predict_proba([feature])
+    result_ppk = estimator.predict_proba_top_k([feature])
+
+    print('predict:', result_p)
+    print('predict_proba:', result_pp)
+    print('top 5:', result_ppk)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('input_path', type=str)
-    parser.add_argument('base_path', type=str)
-    parser.add_argument('-e', '--exclude-files-path', type=str, default='')
+    sub_parser = parser.add_subparsers()
+
+    dataset_parser = sub_parser.add_parser('dataset')
+    dataset_parser.add_argument('base_path', type=str)
+    dataset_parser.add_argument('source', type=str)
+    dataset_parser.set_defaults(func=make_livedoor_dataset)
+
+    train_parser = sub_parser.add_parser('train')
+    train_parser.add_argument('base_path', type=str)
+    train_parser.add_argument('model_path', type=str)
+    train_parser.set_defaults(func=train)
+
+    predict_parser = sub_parser.add_parser('predict')
+    predict_parser.add_argument('base_path', type=str)
+    predict_parser.add_argument('model_path', type=str)
+    predict_parser.add_argument('text', type=str)
+    predict_parser.set_defaults(func=predict)
+
     args = parser.parse_args()
-
-    # input_path = '/Users/shirakiya/datasets/nlp/livedoor-news-data/origin'
-    # exclude_files_path = '/Users/shirakiya/datasets/nlp/livedoor-news-data/exclude_files.txt'
-    # exclude_files = [f.strip() for f in open(exclude_files_path, 'r')]
-    # base_path = 'data/livedoor'
-    # text = 'iPadはどこに行けば変えますか？そしてそのiPadはどう使えばよいですか？'
-
-    if not os.path.exists(args.input_path):
-        raise FileNotFoundError('Not found file or directory.')
-
-    exclude_files = []
-    if args.exclude_files_path and os.path.isfile(args.exclude_files_path):
-        exclude_files = [f.strip() for f in open(args.exclude_files_path, 'r')]
-
-    make_livedoor_dataset(args.input_path, exclude_files, args.base_path)
-    # train(base_path)
-    # predict(base_path, text)
+    args.func(args)
