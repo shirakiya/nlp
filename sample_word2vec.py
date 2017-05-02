@@ -1,7 +1,7 @@
 import argparse
 from pprint import pprint
 
-from nlp.word_embeddings.word2vec import Word2Vec
+from nlp.word_vectors.word2vec import Word2Vec
 from nlp.preprocessing.tokenizer import Tokenizer
 
 

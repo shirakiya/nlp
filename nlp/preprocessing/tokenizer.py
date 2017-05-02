@@ -57,3 +57,6 @@ class Tokenizer(object):
             if len(features) <= 8:  # 発音が無い
                 features.append('')
             yield token(surface, *features)
+
+    def filter_by_pos(self, text, pos=['名詞']):
+        return [token.surface for token in self.tokenize(text) if token.pos in pos]
