@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.externals import joblib
 
@@ -10,10 +10,12 @@ class RandomForest(object):
         self._model_path = model_path
         self._clf = None
 
+    def _prepare_data(self, x, y, test_size=0.2):
+        return train_test_split(x, y, test_size=test_size, random_state=44)
+
     def train(self, x, y):
-        x_train, x_test, y_train, y_test = train_test_split(x, y,
-                                                            test_size=0.2,
-                                                            random_state=44)
+        x_train, x_test, y_train, y_test = self._prepare_data(x, y)
+
         print('train ...')
         self._clf = RandomForestClassifier(n_estimators=20, max_features='auto')
         self._clf.fit(x_train, y_train)
@@ -21,8 +23,36 @@ class RandomForest(object):
         score = self._clf.score(x_test, y_test)
         print('Score: ', score)
 
+        self._save_clf()
+
+    def train_with_gridsearch(self, x, y):
+        x_train, x_test, y_train, y_test = self._prepare_data(x, y)
+
+        print('train with grid search ...')
+        tuned_parameters = [{
+            'n_estimators': [50, 70, 90, 110],
+            'max_features': ['auto', None],
+        }]
+        self._clf = GridSearchCV(RandomForestClassifier(),
+                                 tuned_parameters,
+                                 cv=5,
+                                 scoring='accuracy',
+                                 n_jobs=-1)
+        self._clf.fit(x_train, y_train)
+
+        print('Grid scores')
+        for params, mean_score, scores in self._clf.grid_scores_:
+            report = f'{mean_score:.3f} (+/-{mean_score.std() * 2}) for {params}'
+            print(report)
+        score = self._clf.score(x_test, y_test)
+        print('Best score: ', score)
+        print('Best parametars:', self._clf.best_params_)
+
+        self._save_clf()
+
+    def _save_clf(self):
         joblib.dump(self._clf, self._model_path)
-        print('model saved.')
+        print('classifier saved.')
 
     def _load_clf(self):
         if self._clf is None:

@@ -79,12 +79,16 @@ def make_livedoor_dataset(args):
 def train(args):
     base_path = args.base_path
     model_path = args.model_path
+    with_grid_search = args.with_grid_search
 
     print('collecting dataset.')
     x, y = load_livedoor_dataset(base_path)
 
     trainer = RandomForest(model_path)
-    trainer.train(x, y)
+    if with_grid_search:
+        trainer.train_with_gridsearch(x, y)
+    else:
+        trainer.train(x, y)
 
     print('finish.')
 
@@ -125,6 +129,7 @@ if __name__ == '__main__':
     train_parser = sub_parser.add_parser('train')
     train_parser.add_argument('base_path', type=str)
     train_parser.add_argument('model_path', type=str)
+    train_parser.add_argument('-g', '--with-grid-search', action='store_true')
     train_parser.set_defaults(func=train)
 
     predict_parser = sub_parser.add_parser('predict')
