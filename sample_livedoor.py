@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 
 from nlp.datasets.livedoor import Livedoor
-from nlp.preprocessing.cleaning import clean_text
+from nlp.preprocessing.cleaning import clean_text_ja
 from nlp.preprocessing.tokenizer import Tokenizer
 from nlp.preprocessing.normalization import normalize
 from nlp.preprocessing.stopword import get_basic_stopwords_ja, remove_stopwords
@@ -21,7 +21,7 @@ def get_resource_path(path):
 
 
 def preprocessing(text, tokenizer, stopwords):
-    text = clean_text(text)
+    text = clean_text_ja(text)
     words = tokenizer.filter_by_pos(text)
     words = [normalize(w) for w in words]
     words = remove_stopwords(words, stopwords)

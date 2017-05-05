@@ -91,4 +91,6 @@ ENV/
 # My ignore
 data/*
 !data/.keep
+runs/*
+!runs/.keep
 nlp/preprocessing/stopwords.txt

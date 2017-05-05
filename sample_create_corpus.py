@@ -2,7 +2,7 @@ import os
 import argparse
 
 from nlp.dataset import get_files_list, file_generator
-from nlp.preprocessing.cleaning import clean_text, clean_wiki
+from nlp.preprocessing.cleaning import clean_text_ja, clean_wiki
 from nlp.preprocessing.tokenizer import Tokenizer
 from nlp.preprocessing.normalization import normalize
 from nlp.preprocessing.stopword import get_basic_stopwords_ja, remove_stopwords
@@ -16,7 +16,7 @@ def main(input_path, output_path, processing_flags, exclude_files):
     files = get_files_list(input_path, exclude_files)
     for text in file_generator(files):
         if processing_flags['clean']:
-            text = clean_text(text)
+            text = clean_text_ja(text)
         if processing_flags['wiki']:
             text = clean_wiki(text)
 
