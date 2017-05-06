@@ -14,8 +14,8 @@ class TextCNN(object):
 
         with tf.device('/cpu:0'), tf.name_scope('embedding'):
             W = tf.Variable(tf.random_uniform([vocab_size, embedding_size], -1.0, 1.0), name='W')
-            embedded_chars = tf.nn.embedding_lookup(W, self.input_x)
-            embedded_chars_expanded = tf.expand_dims(embedded_chars, -1)
+            embedded_chars = tf.nn.embedding_lookup(W, self.input_x)  # [?, 56, 128]
+            embedded_chars_expanded = tf.expand_dims(embedded_chars, -1)  # [?, 56, 128, 1]
 
         pooled_output = []
         for filter_size in filter_sizes:
