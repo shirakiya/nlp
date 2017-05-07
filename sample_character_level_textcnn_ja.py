@@ -1,31 +1,36 @@
 import os
 import time
 import datetime
-import tensorflow as tf
+
 import numpy as np
+import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
-from nlp.preprocessing.cleaning import clean_text_en
-from nlp.learning.text_cnn import TextCNN
+from nlp.datasets.livedoor import Livedoor
+from nlp.preprocessing.cleaning import clean_text_ja
+from nlp.word_vectors.word2vec import Word2Vec
+from nlp.learning.character_level_text_cnn import CharacterLevelTextCNN
 from nlp.dataset import generate_batch
 
 
+base_path = os.path.dirname(os.path.abspath(__file__))
+
 # Data Parameters
-tf.flags.DEFINE_float('test_sample_percentage', 0.1,
+tf.flags.DEFINE_string('data_dir', '/Users/shirakiya/datasets/nlp/livedoor-news-data/origin',
+                       'Data source directory (assume "Livedoor Text Corpus")')
+tf.flags.DEFINE_string('embeddings_dir', os.path.join(base_path, 'data', 'livedoor_char.w2v.bin'),
+                       'Directory path of pre-trained char embeddings model')
+tf.flags.DEFINE_float('test_ratio', 0.2,
                       'Percentage of the training data to use for validation')
-tf.flags.DEFINE_string('positive_data_file',
-                       '/Users/shirakiya/datasets/nlp/sentence-polarity-data/rt-polaritydata/rt-polarity.pos',
-                       'Data source for the positive data.')
-tf.flags.DEFINE_string('negative_data_file',
-                       '/Users/shirakiya/datasets/nlp/sentence-polarity-data/rt-polaritydata/rt-polarity.neg',
-                       'Data source for the negative data.')
 # Model Hyperparameters
-tf.flags.DEFINE_integer('embedding_dim', 128,
-                        'Dimensionality of character embedding (default: 128)')
+tf.flags.DEFINE_integer('max_document_length', 1024,
+                        'Length per sequences (= Character count of one x-data)')
+tf.flags.DEFINE_integer('embedding_dim', 200,
+                        'Dimensionality of character embedding (default: 200)')
 tf.flags.DEFINE_string('filter_sizes', '3,4,5',
                        'Comma-separated filter sizes (default: "3,4,5")')
-tf.flags.DEFINE_integer('num_filters', 128,
-                        'Number of filters per filter size (default: 128)')
+tf.flags.DEFINE_integer('num_filters', 64,
+                        'Number of filters per filter size (default: 64)')
 tf.flags.DEFINE_float('dropout_keep_prob', 0.5,
                       'Dropout keep probability (default: 0.5)')
 tf.flags.DEFINE_float('l2_reg_lambda', 0.0,
@@ -46,55 +51,90 @@ tf.flags.DEFINE_boolean('allow_soft_placement', True,
                         'Allow device soft device placement')
 tf.flags.DEFINE_boolean('log_device_placement', False,
                         'Log placement of ops on devices')
-tf.flags.DEFINE_string('output_dir', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runs'),
+tf.flags.DEFINE_string('output_dir', os.path.join(base_path, 'runs'),
                        'Summary log placement of train')
 
 FLAGS = tf.flags.FLAGS
-np.random.seed(10)
 
 
-def load_data_and_labels(positive_data_file, negative_data_file):
-    positive_examples = [s.strip() for s in open(positive_data_file, 'r')]
-    negative_examples = [s.strip() for s in open(negative_data_file, 'r')]
-    x_data = [clean_text_en(sent) for sent in positive_examples + negative_examples]
-    positive_labels = [[0, 1] for _ in positive_examples]
-    negative_labels = [[1, 0] for _ in negative_examples]
-    labels = np.concatenate([positive_labels, negative_labels], 0)
-    return x_data, labels
+def pretrain_embeddings():
+    params = {
+        'sg': 0,  # 0: CBOW, 1: skip-gram
+        'alpha': 0.025,
+        'min_alpha': 0.0001,
+        'size': FLAGS.embedding_dim,
+        'window': 5,
+        'min_count': 3,
+        'workers': os.cpu_count(),
+        'iter': 10,
+    }
+
+    livedoor = Livedoor(FLAGS.data_dir)
+    texts, _ = livedoor.get_data()
+
+    chars = []
+    for text in texts:
+        for line in clean_text_ja(text.strip()).split('\n'):
+            chars.extend(list(line))
+
+    joined_chars = ' '.join(chars)
+    word2vec = Word2Vec()
+    word2vec.train([joined_chars], FLAGS.embeddings_dir, **params)
 
 
-# don't use (train_test_split is useful)
-def shuffle(x, y):
-    shuffle_indices = np.random.permutation(np.arange(len(y)))
-    return x[shuffle_indices], y[shuffle_indices]
+def load_data_and_labels():
+    word2vec = Word2Vec()
+    word2vec.load(FLAGS.embeddings_dir)
+
+    livedoor = Livedoor(FLAGS.data_dir)
+    texts, labels = livedoor.get_data()
+    num_classes = len(list(set(labels)))
+
+    # Vectorize
+    x = []
+    y = []
+    for text, label in zip(texts, labels):
+        # x
+        x_ = []
+        for line in clean_text_ja(text.strip()).split('\n'):
+            for char in list(line):
+                try:
+                    vec = word2vec.get_word_vector(char)
+                except KeyError:
+                    vec = np.zeros(FLAGS.embedding_dim)
+                x_.append(vec)
+        x_ = np.array(x_)
+        if len(x_) > FLAGS.max_document_length:
+            x_ = np.delete(x_, range(FLAGS.max_document_length, len(x_)), axis=0)  # 切り捨て
+        elif len(x_) < FLAGS.max_document_length:
+            x_ = np.pad(x_, ((0, FLAGS.max_document_length - len(x_)), (0, 0)), mode='constant')
+        x.append(x_)
+        # y
+        y_ = np.zeros(num_classes)
+        y_[label] = 1
+        y.append(y_)
+    return x, y
 
 
 def train():
-    # Load data
-    x_text, y = load_data_and_labels(FLAGS.positive_data_file, FLAGS.negative_data_file)
-
-    # Build vocabulary
-    max_document_length = max([len(x.split(" ")) for x in x_text])
-    vocab_processor = tf.contrib.learn.preprocessing.VocabularyProcessor(max_document_length)
-    x = np.array(list(vocab_processor.fit_transform(x_text)))
-    vocab_size = len(vocab_processor.vocabulary_)
-
-    # Randomly shuffle and split data
+    x, y = load_data_and_labels()
     x_train, x_test, y_train, y_test = train_test_split(x, y,
-                                                        test_size=FLAGS.test_sample_percentage,
+                                                        test_size=FLAGS.test_ratio,
                                                         random_state=10)
-    print('Vocabulary Size: {}'.format(vocab_size))
+    x_train = np.array(x_train)
+    x_test = np.array(x_test)
+    y_train = np.array(y_train)
+    y_test = np.array(y_test)
     print('Train/Test split: {}/{}'.format(len(y_train), len(y_test)))
 
     with tf.Graph().as_default():
         session_conf = tf.ConfigProto(allow_soft_placement=FLAGS.allow_soft_placement,
                                       log_device_placement=FLAGS.log_device_placement)
         with tf.Session(config=session_conf) as sess:
-            cnn = TextCNN(
+            cnn = CharacterLevelTextCNN(
                 sequence_length=x_train.shape[1],
                 num_classes=y_train.shape[1],
-                vocab_size=vocab_size,
-                embedding_size=FLAGS.embedding_dim,
+                embedding_dim=FLAGS.embedding_dim,
                 filter_sizes=list(map(int, FLAGS.filter_sizes.split(','))),
                 num_filters=FLAGS.num_filters,
                 l2_reg_lambda=FLAGS.l2_reg_lambda,
@@ -142,9 +182,6 @@ def train():
                 os.mkdir(checkpoint_dir)
             saver = tf.train.Saver(tf.global_variables(), max_to_keep=FLAGS.num_checkpoints)
 
-            # Write vocabulary
-            vocab_processor.save(os.path.join(out_dir, 'vocab'))
-
             # Initialize all variables
             sess.run(tf.global_variables_initializer())
 
@@ -169,7 +206,7 @@ def train():
                 feed_dict = {
                     cnn.input_x: x_batch,
                     cnn.input_y: y_batch,
-                    cnn.dropout_keep_prob: 0,
+                    cnn.dropout_keep_prob: 0.0,
                 }
                 step, summaries, loss, accuracy = sess.run([
                     global_step,
@@ -196,4 +233,5 @@ def train():
 
 
 if __name__ == '__main__':
+    pretrain_embeddings()
     train()
