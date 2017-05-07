@@ -30,6 +30,8 @@ class Word2Vec(object):
         self._model = word2vec.Word2Vec.load(load_path)
 
     def get_word_vector(self, word):
+        if self._model is None:
+            raise Exception('get_word_vector() is available after make or load dictionary.')
         try:
             vector = self._model.wv[word]
         except KeyError:

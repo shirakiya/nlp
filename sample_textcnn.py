@@ -85,7 +85,7 @@ def batch_iter(data, batch_size, num_epochs, shuffle=True):
             yield shuffled_data[start_index:end_index]
 
 
-if __name__ == '__main__':
+def train():
     # Load data
     x_text, y = load_data_and_labels(FLAGS.positive_data_file, FLAGS.negative_data_file)
 
@@ -209,3 +209,7 @@ if __name__ == '__main__':
                 if current_step % FLAGS.checkpoint_every == 0:
                     path = saver.save(sess, checkpoint_prefix, global_step=current_step)
                     print(f'Saved model checkpoint to {path}')
+
+
+if __name__ == '__main__':
+    train()
