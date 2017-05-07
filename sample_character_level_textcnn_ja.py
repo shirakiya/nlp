@@ -25,6 +25,8 @@ tf.flags.DEFINE_float('test_ratio', 0.2,
 # Model Hyperparameters
 tf.flags.DEFINE_integer('max_document_length', 1024,
                         'Length per sequences (= Character count of one x-data)')
+tf.flags.DEFINE_integer('min_document_length', 0,
+                        'Minimum length per sequences')
 tf.flags.DEFINE_integer('embedding_dim', 200,
                         'Dimensionality of character embedding (default: 200)')
 tf.flags.DEFINE_string('filter_sizes', '3,4,5',
@@ -95,19 +97,20 @@ def load_data_and_labels():
     y = []
     for text, label in zip(texts, labels):
         # x
+        chars = [char for line in clean_text_ja(text.strip()).split('\n') for char in line]
+        chars = chars[:FLAGS.max_document_length]  # cut off more than max_document_length
+        chars_len = len(chars)
+        if chars_len < FLAGS.min_document_length:  # don't use too short data
+            continue
         x_ = []
-        for line in clean_text_ja(text.strip()).split('\n'):
-            for char in list(line):
-                try:
-                    vec = word2vec.get_word_vector(char)
-                except KeyError:
-                    vec = np.zeros(FLAGS.embedding_dim)
-                x_.append(vec)
-        x_ = np.array(x_)
-        if len(x_) > FLAGS.max_document_length:
-            x_ = np.delete(x_, range(FLAGS.max_document_length, len(x_)), axis=0)  # 切り捨て
-        elif len(x_) < FLAGS.max_document_length:
-            x_ = np.pad(x_, ((0, FLAGS.max_document_length - len(x_)), (0, 0)), mode='constant')
+        for char in chars:
+            try:
+                vec = word2vec.get_word_vector(char)
+            except KeyError:
+                vec = np.zeros(FLAGS.embedding_dim)
+            x_.append(vec)
+        if chars_len < FLAGS.max_document_length:  # align max_document_length
+            x_ = np.pad(x_, ((0, FLAGS.max_document_length - chars_len), (0, 0)), mode='constant')
         x.append(x_)
         # y
         y_ = np.zeros(num_classes)
@@ -121,10 +124,6 @@ def train():
     x_train, x_test, y_train, y_test = train_test_split(x, y,
                                                         test_size=FLAGS.test_ratio,
                                                         random_state=10)
-    x_train = np.array(x_train)
-    x_test = np.array(x_test)
-    y_train = np.array(y_train)
-    y_test = np.array(y_test)
     print('Train/Test split: {}/{}'.format(len(y_train), len(y_test)))
 
     with tf.Graph().as_default():
@@ -132,8 +131,8 @@ def train():
                                       log_device_placement=FLAGS.log_device_placement)
         with tf.Session(config=session_conf) as sess:
             cnn = CharacterLevelTextCNN(
-                sequence_length=x_train.shape[1],
-                num_classes=y_train.shape[1],
+                sequence_length=FLAGS.max_document_length,
+                num_classes=len(y_train[0]),
                 embedding_dim=FLAGS.embedding_dim,
                 filter_sizes=list(map(int, FLAGS.filter_sizes.split(','))),
                 num_filters=FLAGS.num_filters,
