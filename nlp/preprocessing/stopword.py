@@ -22,5 +22,7 @@ def get_basic_stopwords_ja(path=None):
     return [sw.strip() for sw in stopwords]
 
 
-def remove_stopwords(words, stopwords):
+def remove_stopwords(words, stopwords=None):
+    if stopwords is None:
+        stopwords = get_basic_stopwords_ja()
     return [w for w in words if w not in stopwords]
