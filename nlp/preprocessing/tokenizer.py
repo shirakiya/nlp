@@ -31,6 +31,9 @@ class Tokenizer(object):
         return [token.base_form if token.base_form != '*' else token.surface
                 for token in self.tokenize(text)]
 
+    def filter_by_pos(self, text, pos=['名詞']):
+        return [token.surface for token in self.tokenize(text) if token.pos in pos]
+
     def tokenize(self, text):
         token = namedtuple('Token', [
             'surface',
@@ -57,6 +60,3 @@ class Tokenizer(object):
             if len(features) <= 8:  # 発音が無い
                 features.append('')
             yield token(surface, *features)
-
-    def filter_by_pos(self, text, pos=['名詞']):
-        return [token.surface for token in self.tokenize(text) if token.pos in pos]
