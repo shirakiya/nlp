@@ -4,11 +4,14 @@ import datetime
 import tensorflow as tf
 import numpy as np
 from sklearn.model_selection import train_test_split
-
+import base_import  # noqa
 from nlp.preprocessing.cleaning import clean_text_en
 from nlp.learning.text_cnn import TextCNN
 from nlp.dataset import generate_batch
 
+
+base_path = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
 
 # Data Parameters
 tf.flags.DEFINE_float('test_sample_percentage', 0.1,
@@ -46,7 +49,7 @@ tf.flags.DEFINE_boolean('allow_soft_placement', True,
                         'Allow device soft device placement')
 tf.flags.DEFINE_boolean('log_device_placement', False,
                         'Log placement of ops on devices')
-tf.flags.DEFINE_string('output_dir', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runs'),
+tf.flags.DEFINE_string('output_dir', os.path.join(base_path, 'runs'),
                        'Summary log placement of train')
 
 FLAGS = tf.flags.FLAGS
@@ -63,7 +66,7 @@ def load_data_and_labels(positive_data_file, negative_data_file):
     return x_data, labels
 
 
-# don't use (train_test_split is useful)
+# don't use (train_test_split is more useful)
 def shuffle(x, y):
     shuffle_indices = np.random.permutation(np.arange(len(y)))
     return x[shuffle_indices], y[shuffle_indices]

@@ -1,11 +1,10 @@
 import os
 import time
 import datetime
-
 import numpy as np
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-
+import base_import  # noqa
 from nlp.datasets.livedoor import Livedoor
 from nlp.preprocessing.cleaning import clean_text_ja
 from nlp.word_vectors.word2vec import Word2Vec
@@ -13,7 +12,8 @@ from nlp.learning.character_level_text_cnn import CharacterLevelTextCNN
 from nlp.dataset import generate_batch
 
 
-base_path = os.path.dirname(os.path.abspath(__file__))
+base_path = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
 
 # Data Parameters
 tf.flags.DEFINE_string('data_dir', '/Users/shirakiya/datasets/nlp/livedoor-news-data/origin',

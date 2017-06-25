@@ -1,6 +1,6 @@
 import os
 import argparse
-
+import base_import # noqa
 from nlp.dataset import get_files_list, file_generator
 from nlp.preprocessing.cleaning import clean_text_ja, clean_wiki
 from nlp.preprocessing.tokenizer import Tokenizer

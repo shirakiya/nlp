@@ -1,6 +1,6 @@
 import argparse
 from pprint import pprint
-
+import base_import  # noqa
 from nlp.word_vectors.word2vec import Word2Vec
 from nlp.preprocessing.tokenizer import Tokenizer
 

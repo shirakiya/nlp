@@ -1,9 +1,8 @@
 import argparse
 import os
 import pickle
-
 import numpy as np
-
+import base_import  # noqa
 from nlp.datasets.livedoor import Livedoor
 from nlp.preprocessing.cleaning import clean_text_ja
 from nlp.preprocessing.tokenizer import Tokenizer
